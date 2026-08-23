@@ -1,0 +1,17 @@
+services:
+  app:
+    build: .
+    image: travel-day-budget:latest
+    container_name: travel-day-budget
+    ports:
+      - "${TDB_PORT:-8080}:3000"
+    environment:
+      # Only affects log timestamps; dates are handled client-side.
+      - TZ=${TDB_TZ:-UTC}
+      - MAX_UPLOAD_MB=${TDB_MAX_UPLOAD_MB:-5}
+    volumes:
+      - app-data:/data
+    restart: unless-stopped
+
+volumes:
+  app-data:
