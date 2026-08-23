@@ -12,6 +12,7 @@ services:
     volumes:
       - app-data:/data
     restart: unless-stopped
-
+    labels:
+      - 'traefik.http.middlewares.tdbauth.basicauth.users=${TDB_CREDS}'
 volumes:
   app-data:
