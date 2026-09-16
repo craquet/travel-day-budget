@@ -24,7 +24,7 @@ export function TripTab({ onEdit }: { onEdit: (e: Expense) => void }) {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
           <strong>{tripRangeLabel(trip)}</strong>
           <span className="small muted">
-            {spent}/{formatMoney(total, cur)} · {Math.round(pct)}%
+            {formatMoney(spent, cur)}/{formatMoney(total, cur)} · {Math.round(pct)}%
           </span>
         </div>
         <div className="progressbar">
