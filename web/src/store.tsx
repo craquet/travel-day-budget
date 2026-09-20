@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from 'react';
 import { api } from './api';
-import type { Expense, ExpensePatch, Trip, TripInput } from '../../shared/types.js';
+import type { Expense, ExpensePatch, Trip, TripInput, TripMember } from '../../shared/types.js';
 import { todayISO } from '../../shared/dates.js';
 
 export interface ToastMessage {
@@ -21,6 +21,7 @@ interface StoreValue {
   trips: Trip[];
   trip: Trip | null;
   expenses: Expense[];
+  members: TripMember[];
   ready: boolean;
   toasts: ToastMessage[];
   notify: (text: string, kind?: 'info' | 'error') => void;
@@ -31,8 +32,11 @@ interface StoreValue {
   updateTrip: (id: string, patch: Partial<TripInput>) => Promise<void>;
   deleteTrip: (id: string) => Promise<void>;
   exportTrip: (trip: Trip) => Promise<void>;
+  addMember: (name: string) => Promise<void>;
+  renameMember: (id: string, name: string) => Promise<void>;
+  removeMember: (id: string) => Promise<void>;
   createExpense: (
-    input: { date: string; amountCents: number; title?: string | null; category?: string | null; note?: string | null },
+    input: { date: string; amountCents: number; title?: string | null; category?: string | null; note?: string | null; personId?: string | null },
     photos: File[],
   ) => Promise<void>;
   updateExpense: (id: string, patch: ExpensePatch, newPhotos: File[], removedPhotoIds: string[]) => Promise<void>;
@@ -47,6 +51,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [trips, setTrips] = useState<Trip[]>([]);
   const [tripId, setTripId] = useState<string | null>(() => localStorage.getItem('tdb.tripId'));
   const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [members, setMembers] = useState<TripMember[]>([]);
   const [ready, setReady] = useState(false);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
@@ -62,6 +67,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const reloadExpenses = useCallback(async (id: string) => {
     setExpenses(await api.listExpenses(id));
+  }, []);
+
+  const reloadMembers = useCallback(async (id: string) => {
+    setMembers(await api.listMembers(id));
   }, []);
 
   const reloadTrips = useCallback(async () => {
@@ -86,13 +95,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (tripId && trips.some((t) => t.id === tripId)) {
       reloadExpenses(tripId).catch(() => notify('Failed to load expenses', 'error'));
+      reloadMembers(tripId).catch(() => notify('Failed to load people', 'error'));
     }
-  }, [tripId, trips, reloadExpenses, notify]);
+  }, [tripId, trips, reloadExpenses, reloadMembers, notify]);
 
   const selectTrip = useCallback((id: string | null) => {
     localStorage.setItem('tdb.tripId', id ?? '');
     setTripId(id);
     setExpenses([]);
+    setMembers([]);
   }, []);
 
   const guard = useCallback(
@@ -112,6 +123,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       trips,
       trip,
       expenses,
+      members,
       ready,
       toasts,
       notify,
@@ -137,6 +149,27 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           selectTrip(null);
           await reloadTrips();
           notify('Trip deleted');
+        }),
+      addMember: (name) =>
+        guard(async () => {
+          if (!tripId) throw new Error('No trip selected');
+          await api.createMember(tripId, { name });
+          await reloadMembers(tripId);
+          notify('Person added');
+        }),
+      renameMember: (id, name) =>
+        guard(async () => {
+          if (!tripId) throw new Error('No trip selected');
+          await api.updateMember(tripId, id, { name });
+          await reloadMembers(tripId);
+          notify('Person renamed');
+        }),
+      removeMember: (id) =>
+        guard(async () => {
+          if (!tripId) throw new Error('No trip selected');
+          await api.deleteMember(tripId, id);
+          await reloadMembers(tripId);
+          notify('Person removed');
         }),
       exportTrip: (t) =>
         guard(async () => {
@@ -178,6 +211,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       trips,
       trip,
       expenses,
+      members,
       ready,
       toasts,
       notify,

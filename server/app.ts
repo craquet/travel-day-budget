@@ -12,13 +12,15 @@ import {
   AppError,
   expenseInputSchema,
   expensePatchSchema,
+  memberInputSchema,
+  memberPatchSchema,
   parseBody,
   tripInputSchema,
   tripPatchSchema,
 } from './validate.js';
 import { makeUploadMiddleware, unlinkQuietly } from './uploads.js';
 import { addDays, diffDays, isISODate } from '../shared/dates.js';
-import type { Expense, Trip } from '../shared/types.js';
+import type { Expense, Trip, TripMember } from '../shared/types.js';
 
 export interface AppConfig {
   dataDir: string;
@@ -56,6 +58,21 @@ function expenseOr404(id: string): Expense {
   const expense = db.getExpense(id);
   if (!expense) throw new AppError(404, 'Expense not found');
   return expense;
+}
+
+function memberOr404(id: string): TripMember {
+  const member = db.getMember(id);
+  if (!member) throw new AppError(404, 'Member not found');
+  return member;
+}
+
+/** Throws 400 if personId is set but does not belong to the given trip. */
+function ensurePersonInTrip(trip: Trip, personId: string | null | undefined): void {
+  if (!personId) return;
+  const member = db.getMember(personId!);
+  if (!member || member.tripId !== trip.id) {
+    throw new AppError(400, 'personId must reference a member of this trip');
+  }
 }
 
 export function buildExpressApp(config: AppConfig): express.Express {
@@ -139,7 +156,48 @@ export function buildExpressApp(config: AppConfig): express.Express {
     '/trips/:id/export',
     h((req, res) => {
       const trip = tripOr404(req.params.id!);
-      res.json({ trip, expenses: db.listExpensesByTrip(trip.id) });
+      res.json({ trip, members: db.listMembersByTrip(trip.id), expenses: db.listExpensesByTrip(trip.id) });
+    }),
+  );
+
+  // ---- members ----
+
+  api.get(
+    '/trips/:id/members',
+    h((req, res) => {
+      const trip = tripOr404(req.params.id!);
+      res.json(db.listMembersByTrip(trip.id));
+    }),
+  );
+
+  api.post(
+    '/trips/:id/members',
+    h((req, res) => {
+      const trip = tripOr404(req.params.id!);
+      const input = parseBody(memberInputSchema, req.body);
+      res.status(201).json(db.insertMember(trip.id, input));
+    }),
+  );
+
+  api.patch(
+    '/trips/:id/members/:memberId',
+    h((req, res) => {
+      tripOr404(req.params.id!);
+      const member = memberOr404(req.params.memberId!);
+      if (member.tripId !== req.params.id) throw new AppError(404, 'Member not found');
+      const patch = parseBody(memberPatchSchema, req.body);
+      res.json(db.updateMember(member.id, patch));
+    }),
+  );
+
+  api.delete(
+    '/trips/:id/members/:memberId',
+    h((req, res) => {
+      tripOr404(req.params.id!);
+      const member = memberOr404(req.params.memberId!);
+      if (member.tripId !== req.params.id) throw new AppError(404, 'Member not found');
+      db.deleteMember(member.id);
+      res.status(204).end();
     }),
   );
 
@@ -159,6 +217,7 @@ export function buildExpressApp(config: AppConfig): express.Express {
       const trip = tripOr404(req.params.id!);
       const input = parseBody(expenseInputSchema, req.body);
       ensureDateInTrip(trip, input.date);
+      ensurePersonInTrip(trip, input.personId);
       res.status(201).json(db.insertExpense(trip.id, input));
     }),
   );
@@ -175,6 +234,7 @@ export function buildExpressApp(config: AppConfig): express.Express {
       const trip = tripOr404(existing.tripId);
       const patch = parseBody(expensePatchSchema, req.body);
       if (patch.date !== undefined) ensureDateInTrip(trip, patch.date);
+      ensurePersonInTrip(trip, patch.personId);
       res.json(db.updateExpense(existing.id, patch));
     }),
   );

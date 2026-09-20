@@ -531,6 +531,60 @@ button {
   font-weight: 650;
 }
 
+/* ---------- people ---------- */
+
+.avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: #fff;
+  font-weight: 700;
+  flex-shrink: 0;
+  user-select: none;
+  line-height: 1;
+}
+
+.avatar.unassigned {
+  background: var(--surface2);
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.member-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.member-row .input {
+  flex: 1;
+  min-width: 0;
+}
+
+.member-row .mid {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+}
+
+.member-row .exp-title {
+  font-weight: 600;
+  font-size: 14.5px;
+}
+
+.iconbtn.danger {
+  color: var(--bad);
+  background: var(--bad-soft);
+}
+
+.members-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+}
+
 /* ---------- forms ---------- */
 
 .field {

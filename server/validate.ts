@@ -34,6 +34,22 @@ export const tripInputSchema = z.object({
 
 export const tripPatchSchema = tripInputSchema.partial();
 
+const hexColor = z
+  .string()
+  .regex(/^#[0-9a-fA-F]{6}$/, 'color must be a hex like #ef4444');
+
+export const memberInputSchema = z.object({
+  name: z.string().trim().min(1, 'name is required').max(40),
+  color: hexColor.optional(),
+});
+
+export const memberPatchSchema = z
+  .object({
+    name: z.string().trim().min(1, 'name is required').max(40),
+    color: hexColor,
+  })
+  .partial();
+
 export const expenseInputSchema = z.object({
   date: isoDate,
   amountCents: z
@@ -44,6 +60,7 @@ export const expenseInputSchema = z.object({
   title: z.string().trim().max(80).nullish(),
   category: z.string().trim().max(40).nullish(),
   note: z.string().trim().max(500).nullish(),
+  personId: z.string().min(1).nullish(),
 });
 
 export const expensePatchSchema = expenseInputSchema.partial();

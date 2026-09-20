@@ -1,4 +1,4 @@
-import type { Expense, ExpensePatch, Photo, Trip, TripInput } from '../../shared/types.js';
+import type { Expense, ExpensePatch, Photo, Trip, TripInput, TripMember } from '../../shared/types.js';
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
   let res: Response;
@@ -30,12 +30,21 @@ export const api = {
   updateTrip: (id: string, patchBody: Partial<TripInput>) =>
     patch<Trip>(`/api/trips/${id}`, patchBody),
   deleteTrip: (id: string) => req<void>(`/api/trips/${id}`, { method: 'DELETE' }),
-  exportTrip: (id: string) => req<{ trip: Trip; expenses: Expense[] }>(`/api/trips/${id}/export`),
+  exportTrip: (id: string) =>
+    req<{ trip: Trip; members: TripMember[]; expenses: Expense[] }>(`/api/trips/${id}/export`),
+
+  listMembers: (tripId: string) => req<TripMember[]>(`/api/trips/${tripId}/members`),
+  createMember: (tripId: string, input: { name: string; color?: string }) =>
+    post<TripMember>(`/api/trips/${tripId}/members`, input),
+  updateMember: (tripId: string, id: string, input: { name?: string; color?: string }) =>
+    patch<TripMember>(`/api/trips/${tripId}/members/${id}`, input),
+  deleteMember: (tripId: string, id: string) =>
+    req<void>(`/api/trips/${tripId}/members/${id}`, { method: 'DELETE' }),
 
   listExpenses: (tripId: string) => req<Expense[]>(`/api/trips/${tripId}/expenses`),
   createExpense: (
     tripId: string,
-    input: { date: string; amountCents: number; title?: string | null; category?: string | null; note?: string | null },
+    input: { date: string; amountCents: number; title?: string | null; category?: string | null; note?: string | null; personId?: string | null },
   ) => post<Expense>(`/api/trips/${tripId}/expenses`, input),
   getExpense: (id: string) => req<Expense>(`/api/expenses/${id}`),
   updateExpense: (id: string, patchBody: ExpensePatch) => patch<Expense>(`/api/expenses/${id}`, patchBody),

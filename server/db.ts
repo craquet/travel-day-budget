@@ -2,7 +2,8 @@ import Database from 'better-sqlite3';
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import type { Expense, Photo, Trip, TripInput } from '../shared/types.js';
+import type { Expense, Photo, Trip, TripInput, TripMember, TripMemberInput } from '../shared/types.js';
+import { MEMBER_COLORS } from '../shared/types.js';
 
 interface TripRow {
   id: string;
@@ -15,6 +16,14 @@ interface TripRow {
   updated_at: string;
 }
 
+interface TripMemberRow {
+  id: string;
+  trip_id: string;
+  name: string;
+  color: string;
+  created_at: string;
+}
+
 interface ExpenseRow {
   id: string;
   trip_id: string;
@@ -23,6 +32,7 @@ interface ExpenseRow {
   title: string | null;
   category: string | null;
   note: string | null;
+  person_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -71,6 +81,18 @@ const MIGRATIONS: string[] = [
     created_at TEXT NOT NULL
   );
   CREATE INDEX idx_photos_expense ON photos(expense_id);
+  `,
+  `
+  CREATE TABLE trip_members (
+    id TEXT PRIMARY KEY,
+    trip_id TEXT NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    color TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX idx_trip_members_trip ON trip_members(trip_id);
+  ALTER TABLE expenses ADD COLUMN person_id TEXT REFERENCES trip_members(id);
+  CREATE INDEX idx_expenses_person ON expenses(person_id);
   `,
 ];
 
@@ -136,6 +158,16 @@ function mapPhoto(r: PhotoRow): Photo {
   };
 }
 
+function mapTripMember(r: TripMemberRow): TripMember {
+  return {
+    id: r.id,
+    tripId: r.trip_id,
+    name: r.name,
+    color: r.color,
+    createdAt: r.created_at,
+  };
+}
+
 function mapExpense(r: ExpenseRow, photos: PhotoRow[]): Expense {
   return {
     id: r.id,
@@ -146,6 +178,7 @@ function mapExpense(r: ExpenseRow, photos: PhotoRow[]): Expense {
     category: r.category,
     note: r.note,
     photos: photos.filter((p) => p.expense_id === r.id).map(mapPhoto),
+    personId: r.person_id,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   };
@@ -234,7 +267,14 @@ function photosByExpenseIds(ids: string[]): Map<string, PhotoRow[]> {
 
 export function insertExpense(
   tripId: string,
-  input: { date: string; amountCents: number; title?: string | null; category?: string | null; note?: string | null },
+  input: {
+    date: string;
+    amountCents: number;
+    title?: string | null;
+    category?: string | null;
+    note?: string | null;
+    personId?: string | null;
+  },
 ): Expense {
   const row: ExpenseRow = {
     id: randomUUID(),
@@ -244,13 +284,14 @@ export function insertExpense(
     title: input.title ?? null,
     category: input.category ?? null,
     note: input.note ?? null,
+    person_id: input.personId ?? null,
     created_at: nowIso(),
     updated_at: nowIso(),
   };
   check()
     .prepare(
-      `INSERT INTO expenses (id, trip_id, date, amount_cents, title, category, note, created_at, updated_at)
-       VALUES (@id, @trip_id, @date, @amount_cents, @title, @category, @note, @created_at, @updated_at)`,
+      `INSERT INTO expenses (id, trip_id, date, amount_cents, title, category, note, person_id, created_at, updated_at)
+       VALUES (@id, @trip_id, @date, @amount_cents, @title, @category, @note, @person_id, @created_at, @updated_at)`,
     )
     .run(row);
   return mapExpense(row, []);
@@ -274,7 +315,14 @@ export function getExpense(id: string): Expense | null {
 
 export function updateExpense(
   id: string,
-  patch: Partial<{ date: string; amountCents: number; title?: string | null; category?: string | null; note?: string | null }>,
+  patch: Partial<{
+    date: string;
+    amountCents: number;
+    title?: string | null;
+    category?: string | null;
+    note?: string | null;
+    personId?: string | null;
+  }>,
 ): Expense | null {
   const existing = getExpense(id);
   if (!existing) return null;
@@ -284,13 +332,14 @@ export function updateExpense(
     title: patch.title !== undefined ? patch.title : existing.title,
     category: patch.category !== undefined ? patch.category : existing.category,
     note: patch.note !== undefined ? patch.note : existing.note,
+    personId: patch.personId !== undefined ? patch.personId : existing.personId ?? null,
   };
   check()
     .prepare(
-      `UPDATE expenses SET date = ?, amount_cents = ?, title = ?, category = ?, note = ?, updated_at = ?
+      `UPDATE expenses SET date = ?, amount_cents = ?, title = ?, category = ?, note = ?, person_id = ?, updated_at = ?
        WHERE id = ?`,
     )
-    .run(next.date, next.amountCents, next.title, next.category, next.note, nowIso(), id);
+    .run(next.date, next.amountCents, next.title, next.category, next.note, next.personId, nowIso(), id);
   return getExpense(id);
 }
 
@@ -303,6 +352,64 @@ export function deleteExpense(id: string): string[] {
   ).map((r) => r.filename);
   check().prepare(`DELETE FROM expenses WHERE id = ?`).run(id);
   return filenames;
+}
+
+// ---- members ----
+
+export function insertMember(tripId: string, input: TripMemberInput): TripMember {
+  const paletteIndex = listMembersByTrip(tripId).length % MEMBER_COLORS.length;
+  const row: TripMemberRow = {
+    id: randomUUID(),
+    trip_id: tripId,
+    name: input.name,
+    color: input.color ?? MEMBER_COLORS[paletteIndex]!,
+    created_at: nowIso(),
+  };
+  check()
+    .prepare(
+      `INSERT INTO trip_members (id, trip_id, name, color, created_at)
+       VALUES (@id, @trip_id, @name, @color, @created_at)`,
+    )
+    .run(row);
+  return mapTripMember(row);
+}
+
+export function listMembersByTrip(tripId: string): TripMember[] {
+  const rows = check()
+    .prepare(`SELECT * FROM trip_members WHERE trip_id = ? ORDER BY created_at ASC, rowid ASC`)
+    .all(tripId) as TripMemberRow[];
+  return rows.map(mapTripMember);
+}
+
+export function getMember(id: string): TripMember | null {
+  const row = check().prepare(`SELECT * FROM trip_members WHERE id = ?`).get(id) as
+    | TripMemberRow
+    | undefined;
+  return row ? mapTripMember(row) : null;
+}
+
+export function updateMember(
+  id: string,
+  patch: Partial<TripMemberInput>,
+): TripMember | null {
+  const existing = getMember(id);
+  if (!existing) return null;
+  const next = {
+    name: patch.name ?? existing.name,
+    color: patch.color ?? existing.color,
+  };
+  check()
+    .prepare(`UPDATE trip_members SET name = ?, color = ? WHERE id = ?`)
+    .run(next.name, next.color, id);
+  return getMember(id);
+}
+
+/** Deletes a member and unassigns it from any expenses that reference it. */
+export function deleteMember(id: string): void {
+  check().transaction(() => {
+    check().prepare(`UPDATE expenses SET person_id = NULL WHERE person_id = ?`).run(id);
+    check().prepare(`DELETE FROM trip_members WHERE id = ?`).run(id);
+  })();
 }
 
 // ---- photos ----

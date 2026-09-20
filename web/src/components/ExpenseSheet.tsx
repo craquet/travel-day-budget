@@ -14,7 +14,7 @@ export interface ExpenseDraftTarget {
 }
 
 export function ExpenseSheet({ target, onClose }: { target: ExpenseDraftTarget; onClose: () => void }) {
-  const { trip, createExpense, updateExpense, deleteExpense } = useStore();
+  const { trip, members, createExpense, updateExpense, deleteExpense } = useStore();
   const editing = target.expense;
 
   const clampDate = useMemo(() => {
@@ -30,6 +30,7 @@ export function ExpenseSheet({ target, onClose }: { target: ExpenseDraftTarget; 
   const [category, setCategory] = useState<string>(editing?.category ?? '');
   const [title, setTitle] = useState(editing?.title ?? '');
   const [note, setNote] = useState(editing?.note ?? '');
+  const [personId, setPersonId] = useState<string>(editing?.personId ?? '');
 
   const [existingPhotos, setExistingPhotos] = useState(
     () => editing?.photos.map((p) => ({ id: p.id, url: p.url })) ?? [],
@@ -67,6 +68,7 @@ export function ExpenseSheet({ target, onClose }: { target: ExpenseDraftTarget; 
         title: title.trim() || null,
         category: category.trim() || null,
         note: note.trim() || null,
+        personId: personId || null,
       };
       if (editing) {
         await updateExpense(editing.id, payload, newFiles, removedIds);
@@ -157,6 +159,25 @@ export function ExpenseSheet({ target, onClose }: { target: ExpenseDraftTarget; 
           ))}
         </div>
       </div>
+
+      {members.length > 0 && (
+        <div className="field">
+          <label htmlFor="exp-person">Paid by</label>
+          <select
+            id="exp-person"
+            className="input"
+            value={personId}
+            onChange={(e) => setPersonId(e.target.value)}
+          >
+            <option value="">Nobody selected</option>
+            {members.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       <div className="field">
         <label htmlFor="exp-note">Note (optional)</label>

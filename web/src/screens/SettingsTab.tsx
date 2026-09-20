@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { TripInput } from '../../../shared/types.js';
 import { useStore } from '../store';
 import { formatMoney, tripRangeLabel } from '../format';
 import { TripFormSheet } from './TripsScreen';
-import { ConfirmButton } from '../components/ui';
+import { ConfirmButton, PersonAvatar } from '../components/ui';
+import { IconTrash } from '../components/icons';
 
 export function SettingsTab() {
   const { trip, updateTrip, deleteTrip, exportTrip, selectTrip } = useStore();
@@ -25,6 +26,8 @@ export function SettingsTab() {
           Edit trip
         </button>
       </div>
+
+      <MembersManager />
 
       <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         <div className="section-title" style={{ margin: 0 }}>
@@ -69,6 +72,108 @@ export function SettingsTab() {
           }}
         />
       )}
+    </div>
+  );
+}
+
+function MembersManager() {
+  const { members, addMember, renameMember, removeMember } = useStore();
+  const [newName, setNewName] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const submit = async () => {
+    const name = newName.trim();
+    if (!name || busy) return;
+    setBusy(true);
+    try {
+      await addMember(name);
+      setNewName('');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div className="section-title" style={{ margin: 0 }}>
+        People
+      </div>
+      {members.length === 0 ? (
+        <p className="small muted" style={{ margin: 0 }}>
+          No people yet. Add people who can be assigned to expenses as the payer.
+        </p>
+      ) : (
+        members.map((m) => (
+          <MemberRow
+            key={m.id}
+            member={m}
+            onRename={(name) => renameMember(m.id, name)}
+            onRemove={() => removeMember(m.id)}
+          />
+        ))
+      )}
+      <div className="form-row">
+        <input
+          className="input"
+          placeholder="Name"
+          maxLength={40}
+          value={newName}
+          onChange={(e) => setNewName(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && submit()}
+          aria-label="New person name"
+        />
+        <button type="button" className="btn" style={{ flex: '0 0 auto' }} onClick={submit} disabled={busy || !newName.trim()}>
+          Add
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function MemberRow({
+  member,
+  onRename,
+  onRemove,
+}: {
+  member: { id: string; name: string; color: string };
+  onRename: (name: string) => void;
+  onRemove: () => void;
+}) {
+  const [name, setName] = useState(member.name);
+  const [armed, setArmed] = useState(false);
+
+  useEffect(() => {
+    if (!armed) return;
+    const t = setTimeout(() => setArmed(false), 3500);
+    return () => clearTimeout(t);
+  }, [armed]);
+
+  const commit = () => {
+    const trimmed = name.trim();
+    if (trimmed && trimmed !== member.name) onRename(trimmed);
+  };
+
+  return (
+    <div className="member-row">
+      <PersonAvatar name={member.name} color={member.color} />
+      <input
+        className="input"
+        value={name}
+        maxLength={40}
+        onChange={(e) => setName(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+        aria-label={`Rename ${member.name}`}
+      />
+      <button
+        type="button"
+        className={`iconbtn${armed ? ' danger' : ''}`}
+        aria-label={armed ? `Confirm remove ${member.name}` : `Remove ${member.name}`}
+        onClick={() => (armed ? onRemove() : setArmed(true))}
+        onBlur={() => setArmed(false)}
+      >
+        {armed ? '✓' : <IconTrash size={16} />}
+      </button>
     </div>
   );
 }

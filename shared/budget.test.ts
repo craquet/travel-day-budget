@@ -105,12 +105,13 @@ test('no cent drift; futures pinned to the settled rate', () => {
   assert.equal(v3.days[9]!.allocatedCents, 9_990); // entire pool lands on the last day
 });
 
-test('massive overspend drives future projections negative', () => {
+test('massive overspend drives remaining negative but allocations never go below zero', () => {
   const t = trip({ days: 4, dailyBudgetCents: 10_000 });
   const v = computeTripView(t, [exp('2026-08-01', 100_000)], '2026-08-02');
-  // remaining pool 40_000 − 100_000 = −60_000 over 3 days → −20_000 each
-  assert.equal(v.days[1]!.allocatedCents, -20_000);
-  assert.ok(v.days.every((d) => d.index === 1 || d.allocatedCents < 0));
+  // remaining pool 40_000 − 100_000 = −60_000 over 3 days → −20_000 each,
+  // but allocations are clamped so they never go below zero.
+  assert.equal(v.days[0]!.allocatedCents, 10_000);
+  assert.ok(v.days.slice(1).every((d) => d.allocatedCents === 0));
   assert.equal(v.totals.remainingCents, 40_000 - 100_000);
 });
 
@@ -143,18 +144,18 @@ test('after the trip ended, everything is past', () => {
   assert.ok(v.days.every((d) => d.kind === 'past'));
 });
 
-test('past-day savings aggregate signed, using settled allocations', () => {
+test('past-day savings aggregate signed from the base daily allowance', () => {
   // base 100/day, 10 days, viewed on day 3 (days 1–2 settled)
   const v = computeTripView(
     trip({ dailyBudgetCents: 10_000 }),
-    [exp('2026-08-01', 8_000), exp('2026-08-02', 12_000)],
+    [exp('2026-08-01', 7_000), exp('2026-08-02', 12_000)],
     '2026-08-03',
   );
-  // day 1: allocated 10_000 − spent 8_000 = +2_000
-  // day 2: allocated 10_222 (surplus redistributed) − spent 12_000 = −1_778
+  // Savings count against the base allowance, not the redistributed allocation:
+  // (10_000 − 7_000) + (10_000 − 12_000) = +1_000
   assert.equal(v.days[0]!.allocatedCents, 10_000);
-  assert.equal(v.days[1]!.allocatedCents, 10_222);
-  assert.equal(v.totals.pastSavedCents, 222);
+  assert.equal(v.days[1]!.allocatedCents, 10_333);
+  assert.equal(v.totals.pastSavedCents, 1_000);
   assert.equal(v.days[2]!.kind, 'today'); // today is NOT counted
 });
 

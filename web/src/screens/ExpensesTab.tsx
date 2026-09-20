@@ -3,12 +3,12 @@ import type { Expense } from '../../../shared/types.js';
 import { computeTripView } from '../../../shared/budget.js';
 import { useStore, useToday } from '../store';
 import { categoryColor, dateLabel, formatMoney } from '../format';
-import { EmptyState } from '../components/ui';
+import { EmptyState, PersonAvatar } from '../components/ui';
 import { PhotoLightbox } from '../components/PhotoLightbox';
 import { IconCamera } from '../components/icons';
 
 export function ExpensesTab({ onEdit }: { onEdit: (e: Expense) => void }) {
-  const { trip, expenses } = useStore();
+  const { trip, expenses, members } = useStore();
   const today = useToday();
   const [query, setQuery] = useState('');
   const [lightbox, setLightbox] = useState<{ expenseId: string; index: number } | null>(null);
@@ -26,6 +26,18 @@ export function ExpensesTab({ onEdit }: { onEdit: (e: Expense) => void }) {
     );
   }, [expenses, query]);
 
+  const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
+
+  const personTotals = useMemo(() => {
+    const totals = new Map<string, number>();
+    let unassigned = 0;
+    for (const e of expenses) {
+      if (e.personId) totals.set(e.personId, (totals.get(e.personId) ?? 0) + e.amountCents);
+      else unassigned += e.amountCents;
+    }
+    return { totals, unassigned };
+  }, [expenses]);
+
   if (!trip || !view) return null;
   const cur = trip.currency;
 
@@ -38,6 +50,7 @@ export function ExpensesTab({ onEdit }: { onEdit: (e: Expense) => void }) {
   }
 
   const lightboxExpense = lightbox && expenses.find((e) => e.id === lightbox.expenseId);
+  const whoPaid = (e: Expense) => (e.personId ? memberById.get(e.personId) : null);
 
   return (
     <div className="page">
@@ -49,6 +62,38 @@ export function ExpensesTab({ onEdit }: { onEdit: (e: Expense) => void }) {
           aria-label="Search expenses"
         />
       </div>
+
+      {(members.length > 0 || personTotals.unassigned > 0) && (
+        <div className="card members-summary">
+          {members.map((m) => {
+            const total = personTotals.totals.get(m.id) ?? 0;
+            return (
+              <div className="member-row" key={m.id}>
+                <PersonAvatar name={m.name} color={m.color} />
+                <span className="mid">
+                  <span className="exp-title">{m.name}</span>
+                </span>
+                <span className="amount" style={{ fontWeight: 700 }}>
+                  {formatMoney(total, cur)}
+                </span>
+              </div>
+            );
+          })}
+          {personTotals.unassigned > 0 && (
+            <div className="member-row">
+              <span className="avatar unassigned" aria-hidden>
+                ?
+              </span>
+              <span className="mid">
+                <span className="exp-title">Unassigned</span>
+              </span>
+              <span className="amount" style={{ fontWeight: 700, color: 'var(--muted)' }}>
+                {formatMoney(personTotals.unassigned, cur)}
+              </span>
+            </div>
+          )}
+        </div>
+      )}
 
       {filtered.length === 0 && (
         <EmptyState icon={<IconCamera size={34} />} headline={query ? 'No matches' : 'No expenses yet'}>
@@ -72,6 +117,9 @@ export function ExpensesTab({ onEdit }: { onEdit: (e: Expense) => void }) {
               {g.items.map((e) => (
                 <button key={e.id} className="exprow" onClick={() => onEdit(e)}>
                   <span className="catdot" style={{ background: categoryColor(e.category) }} />
+                  {whoPaid(e) && (
+                    <PersonAvatar name={whoPaid(e)!.name} color={whoPaid(e)!.color} size={18} />
+                  )}
                   <span className="mid">
                     <span className="exp-title">{e.title || e.category || 'Expense'}</span>
                     <span className="exp-sub">{e.category ?? 'Uncategorized'}</span>

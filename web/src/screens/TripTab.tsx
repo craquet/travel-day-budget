@@ -3,16 +3,17 @@ import type { Expense } from '../../../shared/types.js';
 import { computeTripView } from '../../../shared/budget.js';
 import { useStore, useToday } from '../store';
 import { categoryColor, dayLabel, formatMoney, tripRangeLabel } from '../format';
-import { EmptyState } from '../components/ui';
+import { EmptyState, PersonAvatar } from '../components/ui';
 import { IconChevron, IconTrendDown, IconTrendUp } from '../components/icons';
 
 export function TripTab({ onEdit }: { onEdit: (e: Expense) => void }) {
-  const { trip, expenses } = useStore();
+  const { trip, expenses, members } = useStore();
   const today = useToday();
   const [expanded, setExpanded] = useState<number | null>(null);
 
   if (!trip) return null;
   const view = computeTripView(trip, expenses, today);
+  const memberById = new Map(members.map((m) => [m.id, m]));
   const cur = trip.currency;
   const total = view.totals.budgetCents;
   const spent = view.totals.spentCents;
@@ -114,18 +115,22 @@ export function TripTab({ onEdit }: { onEdit: (e: Expense) => void }) {
                   {dayExpenses.length === 0 ? (
                     <EmptyState headline="No expenses">Nothing logged for this day.</EmptyState>
                   ) : (
-                    dayExpenses.map((e) => (
-                      <button key={e.id} className="exprow" onClick={() => onEdit(e)}>
-                        <span className="catdot" style={{ background: categoryColor(e.category) }} />
-                        <span className="mid">
-                          <span className="exp-title">{e.title || e.category || 'Expense'}</span>
-                          {e.note && <span className="exp-sub">{e.note}</span>}
-                        </span>
-                        <span className="amount" style={{ fontWeight: 700 }}>
-                          {formatMoney(e.amountCents, cur)}
-                        </span>
-                      </button>
-                    ))
+                    dayExpenses.map((e) => {
+                      const payer = e.personId ? memberById.get(e.personId) : null;
+                      return (
+                        <button key={e.id} className="exprow" onClick={() => onEdit(e)}>
+                          <span className="catdot" style={{ background: categoryColor(e.category) }} />
+                          {payer && <PersonAvatar name={payer.name} color={payer.color} size={18} />}
+                          <span className="mid">
+                            <span className="exp-title">{e.title || e.category || 'Expense'}</span>
+                            {e.note && <span className="exp-sub">{e.note}</span>}
+                          </span>
+                          <span className="amount" style={{ fontWeight: 700 }}>
+                            {formatMoney(e.amountCents, cur)}
+                          </span>
+                        </button>
+                      );
+                    })
                   )}
                 </div>
               )}

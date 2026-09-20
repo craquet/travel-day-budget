@@ -258,6 +258,111 @@ describe('photos', () => {
   });
 });
 
+describe('members', () => {
+  let tripId = '';
+
+  before(async () => {
+    const r = await api('POST', '/api/trips', {
+      name: 'People',
+      startDate: '2026-08-01',
+      days: 5,
+      dailyBudgetCents: 10_000,
+    });
+    tripId = r.json.id;
+  });
+
+  it('creates a member with an auto-assigned color', async () => {
+    const r = await api('POST', `/api/trips/${tripId}/members`, { name: 'Alice' });
+    assert.equal(r.status, 201);
+    assert.equal(r.json.name, 'Alice');
+    assert.match(r.json.color, /^#[0-9a-fA-F]{6}$/);
+    assert.equal(r.json.tripId, tripId);
+  });
+
+  it('lists members and rejects empty names', async () => {
+    const list = await api('GET', `/api/trips/${tripId}/members`);
+    assert.equal(list.status, 200);
+    assert.equal(list.json.length, 1);
+    const bad = await api('POST', `/api/trips/${tripId}/members`, { name: '   ' });
+    assert.equal(bad.status, 400);
+  });
+
+  it('renames a member', async () => {
+    const list = await api('GET', `/api/trips/${tripId}/members`);
+    const id = list.json[0].id;
+    const r = await api('PATCH', `/api/trips/${tripId}/members/${id}`, { name: 'Alicia' });
+    assert.equal(r.status, 200);
+    assert.equal(r.json.name, 'Alicia');
+  });
+
+  it('deleting a member unsets it on its expenses', async () => {
+    const created = await api('POST', `/api/trips/${tripId}/members`, { name: 'Cara' });
+    const id = created.json.id;
+    const e = await api('POST', `/api/trips/${tripId}/expenses`, {
+      date: '2026-08-02',
+      amountCents: 500,
+      personId: id,
+    });
+    assert.equal(e.status, 201);
+    assert.equal(e.json.personId, id);
+    const del = await api('DELETE', `/api/trips/${tripId}/members/${id}`);
+    assert.equal(del.status, 204);
+    const after = await api('GET', `/api/expenses/${e.json.id}`);
+    assert.equal(after.json.personId, null);
+    const list = await api('GET', `/api/trips/${tripId}/members`);
+    assert.ok(!list.json.some((m: { id: string }) => m.id === id));
+  });
+
+  it('rejects personId from another trip and unknown ids', async () => {
+    const other = await api('POST', '/api/trips', {
+      name: 'Other',
+      startDate: '2026-08-01',
+      days: 5,
+      dailyBudgetCents: 10_000,
+    });
+    const foreign = await api('POST', `/api/trips/${other.json.id}/members`, { name: 'Bob' });
+    const bad = await api('POST', `/api/trips/${tripId}/expenses`, {
+      date: '2026-08-02',
+      amountCents: 100,
+      personId: foreign.json.id,
+    });
+    assert.equal(bad.status, 400);
+    assert.match(bad.json.error, /this trip/);
+    const unknown = await api('POST', `/api/trips/${tripId}/expenses`, {
+      date: '2026-08-02',
+      amountCents: 100,
+      personId: 'no-such-member',
+    });
+    assert.equal(unknown.status, 400);
+  });
+
+  it('patches an expense to unassign / assign a person', async () => {
+    const list = await api('GET', `/api/trips/${tripId}/members`);
+    const id = list.json[0].id;
+    const expenseList = await api('GET', `/api/trips/${tripId}/expenses`);
+    const eid = expenseList.json.at(-1).id;
+    const clear = await api('PATCH', `/api/expenses/${eid}`, { personId: null });
+    assert.equal(clear.status, 200);
+    assert.equal(clear.json.personId, null);
+    const assign = await api('PATCH', `/api/expenses/${eid}`, { personId: id });
+    assert.equal(assign.json.personId, id);
+  });
+
+  it('export bundle includes members', async () => {
+    const r = await api('GET', `/api/trips/${tripId}/export`);
+    assert.equal(r.status, 200);
+    assert.ok(Array.isArray(r.json.members) && r.json.members.length >= 1);
+  });
+
+  it('deletes a member that has no assigned expenses', async () => {
+    const bob = await api('POST', `/api/trips/${tripId}/members`, { name: 'Bob' });
+    const del = await api('DELETE', `/api/trips/${tripId}/members/${bob.json.id}`);
+    assert.equal(del.status, 204);
+    const gone = await api('GET', `/api/trips/${tripId}/members`);
+    assert.ok(!gone.json.some((m: { id: string }) => m.id === bob.json.id));
+  });
+});
+
 describe('protocol edge cases', () => {
   it('malformed JSON → 400', async () => {
     const res = await fetch(`${baseUrl}/api/trips`, {

@@ -24,6 +24,28 @@ export function EmptyState({
   );
 }
 
+/** Colored circle with the person's initial. */
+export function PersonAvatar({
+  name,
+  color,
+  size = 22,
+}: {
+  name: string;
+  color: string;
+  size?: number;
+}) {
+  const initial = (name.trim()[0] ?? '?').toUpperCase();
+  return (
+    <span
+      className="avatar"
+      aria-hidden
+      style={{ width: size, height: size, background: color, fontSize: size * 0.44 }}
+    >
+      {initial}
+    </span>
+  );
+}
+
 /** Two-step destructive confirmation button. */
 export function ConfirmButton({
   label,
