@@ -16,6 +16,7 @@ export function TripTab({ onEdit }: { onEdit: (e: Expense) => void }) {
   const cur = trip.currency;
   const total = view.totals.budgetCents;
   const spent = view.totals.spentCents;
+  const saved = view.totals.pastSavedCents;
   const pct = total > 0 ? Math.min(100, (spent / total) * 100) : 0;
 
   return (
@@ -35,7 +36,7 @@ export function TripTab({ onEdit }: { onEdit: (e: Expense) => void }) {
             }}
           />
         </div>
-        <div className="stat-row" style={{ gridTemplateColumns: 'repeat(2, 1fr)' }}>
+        <div className="stat-row">
           <div className="stat">
             <div className="label">Spent</div>
             <div className="value amount">{formatMoney(spent, cur)}</div>
@@ -47,6 +48,12 @@ export function TripTab({ onEdit }: { onEdit: (e: Expense) => void }) {
               style={{ color: total - spent >= 0 ? undefined : 'var(--bad)' }}
             >
               {formatMoney(total - spent, cur)}
+            </div>
+          </div>
+          <div className="stat">
+            <div className="label">{saved >= 0 ? 'Saved' : 'Overspent'}</div>
+            <div className="value amount" style={{ color: saved >= 0 ? 'var(--good)' : 'var(--bad)' }}>
+              {formatMoney(Math.abs(saved), cur)}
             </div>
           </div>
         </div>

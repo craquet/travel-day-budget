@@ -34,6 +34,8 @@ export interface TripView {
     budgetCents: number;
     spentCents: number;
     remainingCents: number;
+    /** Signed sum of (allocated − spent) over settled/past days only. + saved, − overspent. */
+    pastSavedCents: number;
   };
   today: DayView | null;
 }
@@ -71,6 +73,7 @@ export function computeTripView(
   let daysLeft = n;
   // Rate before any settlement happens equals the base budget.
   let rate = roundDiv(pool, Math.max(daysLeft, 1));
+  let pastSavedCents = 0;
 
   for (let k = 1; k <= n; k++) {
     const spent = spentByDay[k];
@@ -86,12 +89,15 @@ export function computeTripView(
       if (kind === 'past') {
         // Only elapsed days settle their spend into the pool and move the rate.
         // Today never leaks into the projection — it settles tomorrow.
+        pastSavedCents += base - spent;
         pool -= spent;
         daysLeft -= 1;
         // When a single day remains it absorbs the exact remainder — no cent drift.
         rate = daysLeft >= 1 ? roundDiv(pool, daysLeft) : pool;
       }
     }
+
+    allocated = Math.max(allocated, 0)
 
     days.push({
       index: k,
@@ -113,6 +119,7 @@ export function computeTripView(
       budgetCents: base * n,
       spentCents: totalSpent,
       remainingCents: base * n - totalSpent,
+      pastSavedCents,
     },
     today,
   };

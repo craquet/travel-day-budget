@@ -142,3 +142,29 @@ test('after the trip ended, everything is past', () => {
   assert.equal(v.today, null);
   assert.ok(v.days.every((d) => d.kind === 'past'));
 });
+
+test('past-day savings aggregate signed, using settled allocations', () => {
+  // base 100/day, 10 days, viewed on day 3 (days 1–2 settled)
+  const v = computeTripView(
+    trip({ dailyBudgetCents: 10_000 }),
+    [exp('2026-08-01', 8_000), exp('2026-08-02', 12_000)],
+    '2026-08-03',
+  );
+  // day 1: allocated 10_000 − spent 8_000 = +2_000
+  // day 2: allocated 10_222 (surplus redistributed) − spent 12_000 = −1_778
+  assert.equal(v.days[0]!.allocatedCents, 10_000);
+  assert.equal(v.days[1]!.allocatedCents, 10_222);
+  assert.equal(v.totals.pastSavedCents, 222);
+  assert.equal(v.days[2]!.kind, 'today'); // today is NOT counted
+});
+
+test('past-day savings turns negative on settled overspend', () => {
+  const v = computeTripView(trip(), [exp('2026-08-01', 30_000)], '2026-08-02');
+  assert.equal(v.days[0]!.kind, 'past');
+  assert.equal(v.totals.pastSavedCents, -20_000);
+});
+
+test('no settled days yet: past-day savings is zero', () => {
+  const v = computeTripView(trip(), [exp('2026-08-01', 5_000)], '2026-08-01');
+  assert.equal(v.totals.pastSavedCents, 0);
+});
