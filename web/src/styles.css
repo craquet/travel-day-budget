@@ -573,16 +573,90 @@ button {
   font-size: 14.5px;
 }
 
+.iconbtn.active {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
 .iconbtn.danger {
   color: var(--bad);
   background: var(--bad-soft);
 }
 
-.members-summary {
+.toolbar {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.toolbar .searchbar {
+  flex: 1;
+  min-width: 0;
+}
+
+.filter-chip {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.insights {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 12px 14px;
+  gap: 12px;
+  padding: 12px;
+}
+
+.segmented {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 999px;
+  background: var(--surface2);
+}
+
+.segmented button {
+  flex: 1;
+  border: none;
+  background: none;
+  padding: 7px 10px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--muted);
+}
+
+.segmented button.active {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow);
+}
+
+.insights-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.insights-body.category {
+  flex-direction: row;
+  align-items: center;
+  gap: 16px;
+}
+
+.insights-body.category .legend {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .datefilter {
@@ -606,19 +680,6 @@ button {
   min-height: 44px;
   padding: 8px 10px;
   font-size: 14px;
-}
-
-.categories-card {
-  display: flex;
-  gap: 16px;
-  align-items: center;
-}
-
-.categories-card .legend {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
 }
 
 .legend-row {

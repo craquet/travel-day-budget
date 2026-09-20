@@ -7,7 +7,9 @@ import { categoryColor, dateLabel, formatMoney } from '../format';
 import { EmptyState, PersonAvatar } from '../components/ui';
 import { CategoryDonut } from '../components/CategoryDonut';
 import { PhotoLightbox } from '../components/PhotoLightbox';
-import { IconCamera } from '../components/icons';
+import { IconCamera, IconFilter } from '../components/icons';
+
+type Insight = 'people' | 'categories';
 
 export function ExpensesTab({ onEdit }: { onEdit: (e: Expense) => void }) {
   const { trip, expenses, members } = useStore();
@@ -15,6 +17,8 @@ export function ExpensesTab({ onEdit }: { onEdit: (e: Expense) => void }) {
   const [query, setQuery] = useState('');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [insight, setInsight] = useState<Insight>('people');
   const [lightbox, setLightbox] = useState<{ expenseId: string; index: number } | null>(null);
 
   const view = useMemo(
@@ -65,8 +69,8 @@ export function ExpensesTab({ onEdit }: { onEdit: (e: Expense) => void }) {
 
   if (!trip || !view) return null;
   const cur = trip.currency;
+  const tripEnd = addDays(trip.startDate, trip.days - 1);
 
-  // group by date
   const groups: { date: string; items: Expense[] }[] = [];
   for (const e of filtered) {
     const g = groups.at(-1);
@@ -77,46 +81,64 @@ export function ExpensesTab({ onEdit }: { onEdit: (e: Expense) => void }) {
   const lightboxExpense = lightbox && expenses.find((e) => e.id === lightbox.expenseId);
   const whoPaid = (e: Expense) => (e.personId ? memberById.get(e.personId) : null);
   const rangeActive = !!(from || to);
-  const tripEnd = addDays(trip.startDate, trip.days - 1);
+  const canPeople = members.length > 0 || personTotals.unassigned > 0;
+  const canCategories = filtered.length > 0;
+  const activeInsight: Insight =
+    insight === 'people' && canPeople ? 'people' : canCategories ? 'categories' : 'people';
   const catTotal = categorySegments.reduce((a, s) => a + s.value, 0);
+
+  const shortDate = (iso: string) =>
+    new Date(`${iso}T12:00:00`).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+  const rangeLabel = [from && shortDate(from), to && shortDate(to)].filter(Boolean).join(' – ');
 
   return (
     <div className="page">
-      <div className="searchbar">
-        <input
-          placeholder="Search title, category or note…"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          aria-label="Search expenses"
-        />
+      <div className="toolbar">
+        <div className="searchbar">
+          <input
+            placeholder="Search title, category or note…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            aria-label="Search expenses"
+          />
+        </div>
+        <button
+          type="button"
+          className={`iconbtn${rangeActive || filterOpen ? ' active' : ''}`}
+          aria-label="Toggle date filter"
+          aria-expanded={filterOpen}
+          onClick={() => setFilterOpen((o) => !o)}
+        >
+          <IconFilter />
+        </button>
       </div>
 
-      <div className="datefilter">
-        <label>
-          <span>From</span>
-          <input
-            type="date"
-            className="input"
-            min={trip.startDate}
-            max={tripEnd}
-            value={from}
-            onChange={(e) => setFrom(e.target.value)}
-            aria-label="Filter expenses from date"
-          />
-        </label>
-        <label>
-          <span>To</span>
-          <input
-            type="date"
-            className="input"
-            min={trip.startDate}
-            max={tripEnd}
-            value={to}
-            onChange={(e) => setTo(e.target.value)}
-            aria-label="Filter expenses to date"
-          />
-        </label>
-        {rangeActive && (
+      {filterOpen && (
+        <div className="datefilter">
+          <label>
+            <span>From</span>
+            <input
+              type="date"
+              className="input"
+              min={trip.startDate}
+              max={tripEnd}
+              value={from}
+              onChange={(e) => setFrom(e.target.value)}
+              aria-label="Filter expenses from date"
+            />
+          </label>
+          <label>
+            <span>To</span>
+            <input
+              type="date"
+              className="input"
+              min={trip.startDate}
+              max={tripEnd}
+              value={to}
+              onChange={(e) => setTo(e.target.value)}
+              aria-label="Filter expenses to date"
+            />
+          </label>
           <button
             type="button"
             className="iconbtn"
@@ -128,63 +150,114 @@ export function ExpensesTab({ onEdit }: { onEdit: (e: Expense) => void }) {
           >
             ✕
           </button>
-        )}
-      </div>
-
-      {(members.length > 0 || personTotals.unassigned > 0) && (
-        <div className="card members-summary">
-          {members.map((m) => {
-            const total = personTotals.totals.get(m.id) ?? 0;
-            return (
-              <div className="member-row" key={m.id}>
-                <PersonAvatar name={m.name} color={m.color} />
-                <span className="mid">
-                  <span className="exp-title">{m.name}</span>
-                </span>
-                <span className="amount" style={{ fontWeight: 700 }}>
-                  {formatMoney(total, cur)}
-                </span>
-              </div>
-            );
-          })}
-          {personTotals.unassigned > 0 && (
-            <div className="member-row">
-              <span className="avatar unassigned" aria-hidden>
-                ?
-              </span>
-              <span className="mid">
-                <span className="exp-title">Unassigned</span>
-              </span>
-              <span className="amount" style={{ fontWeight: 700, color: 'var(--muted)' }}>
-                {formatMoney(personTotals.unassigned, cur)}
-              </span>
-            </div>
-          )}
         </div>
       )}
 
-      {filtered.length > 0 && (
-        <div className="card categories-card">
-          <CategoryDonut segments={categorySegments} size={124} stroke={22}>
-            <span className="small muted">Total</span>
-            <span className="amount" style={{ fontWeight: 800, marginTop: 2 }}>
-              {formatMoney(catTotal, cur)}
-            </span>
-          </CategoryDonut>
-          <div className="legend">
-            {categorySegments.map((s) => (
-              <div className="legend-row" key={s.label}>
-                <span className="catdot" style={{ background: s.color }} />
-                <span className="mid exp-title">{s.label}</span>
-                <span className="small muted" style={{ flexShrink: 0 }}>
-                  {Math.round((s.value / catTotal) * 100)}%
-                </span>
-                <span className="amount" style={{ fontWeight: 700, flexShrink: 0 }}>
-                  {formatMoney(s.value, cur)}
-                </span>
-              </div>
-            ))}
+      {!filterOpen && rangeActive && (
+        <button
+          type="button"
+          className="filter-chip"
+          onClick={() => setFilterOpen(true)}
+          aria-label="Edit date filter"
+        >
+          {rangeLabel}
+          <span
+            role="button"
+            aria-label="Clear date filter"
+            onClick={(ev) => {
+              ev.stopPropagation();
+              setFrom('');
+              setTo('');
+            }}
+          >
+            ✕
+          </span>
+        </button>
+      )}
+
+      {(canPeople || canCategories) && (
+        <div className="card insights">
+          <div className="segmented" role="tablist" aria-label="Expense breakdown">
+            {canPeople && (
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeInsight === 'people'}
+                className={activeInsight === 'people' ? 'active' : ''}
+                onClick={() => setInsight('people')}
+              >
+                By person
+              </button>
+            )}
+            {canCategories && (
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeInsight === 'categories'}
+                className={activeInsight === 'categories' ? 'active' : ''}
+                onClick={() => setInsight('categories')}
+              >
+                By category
+              </button>
+            )}
           </div>
+
+          {activeInsight === 'people' && (
+            <div className="insights-body">
+              {members.map((m) => {
+                const total = personTotals.totals.get(m.id) ?? 0;
+                return (
+                  <div className="member-row" key={m.id}>
+                    <PersonAvatar name={m.name} color={m.color} />
+                    <span className="mid">
+                      <span className="exp-title">{m.name}</span>
+                    </span>
+                    <span className="amount" style={{ fontWeight: 700 }}>
+                      {formatMoney(total, cur)}
+                    </span>
+                  </div>
+                );
+              })}
+              {personTotals.unassigned > 0 && (
+                <div className="member-row">
+                  <span className="avatar unassigned" aria-hidden>
+                    ?
+                  </span>
+                  <span className="mid">
+                    <span className="exp-title">Unassigned</span>
+                  </span>
+                  <span className="amount" style={{ fontWeight: 700, color: 'var(--muted)' }}>
+                    {formatMoney(personTotals.unassigned, cur)}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeInsight === 'categories' && (
+            <div className="insights-body category">
+              <CategoryDonut segments={categorySegments} size={112} stroke={20}>
+                <span className="small muted">Total</span>
+                <span className="amount" style={{ fontWeight: 800, marginTop: 2 }}>
+                  {formatMoney(catTotal, cur)}
+                </span>
+              </CategoryDonut>
+              <div className="legend">
+                {categorySegments.map((s) => (
+                  <div className="legend-row" key={s.label}>
+                    <span className="catdot" style={{ background: s.color }} />
+                    <span className="mid exp-title">{s.label}</span>
+                    <span className="small muted" style={{ flexShrink: 0 }}>
+                      {Math.round((s.value / catTotal) * 100)}%
+                    </span>
+                    <span className="amount" style={{ fontWeight: 700, flexShrink: 0 }}>
+                      {formatMoney(s.value, cur)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 

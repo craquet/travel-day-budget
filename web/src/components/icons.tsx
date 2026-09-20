@@ -94,3 +94,9 @@ export const IconInfo = ({ size = 18 }: IconProps) => (
     <path d="M12 16v-4m0-4h.01" />
   </svg>
 );
+
+export const IconFilter = ({ size = 20 }: IconProps) => (
+  <svg {...svgProps(size)}>
+    <path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z" />
+  </svg>
+);
