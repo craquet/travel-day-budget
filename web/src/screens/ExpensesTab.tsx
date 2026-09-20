@@ -1,9 +1,11 @@
 import { useMemo, useState } from 'react';
 import type { Expense } from '../../../shared/types.js';
 import { computeTripView } from '../../../shared/budget.js';
+import { addDays } from '../../../shared/dates.js';
 import { useStore, useToday } from '../store';
 import { categoryColor, dateLabel, formatMoney } from '../format';
 import { EmptyState, PersonAvatar } from '../components/ui';
+import { CategoryDonut } from '../components/CategoryDonut';
 import { PhotoLightbox } from '../components/PhotoLightbox';
 import { IconCamera } from '../components/icons';
 
@@ -11,6 +13,8 @@ export function ExpensesTab({ onEdit }: { onEdit: (e: Expense) => void }) {
   const { trip, expenses, members } = useStore();
   const today = useToday();
   const [query, setQuery] = useState('');
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
   const [lightbox, setLightbox] = useState<{ expenseId: string; index: number } | null>(null);
 
   const view = useMemo(
@@ -18,25 +22,46 @@ export function ExpensesTab({ onEdit }: { onEdit: (e: Expense) => void }) {
     [trip, expenses, today],
   );
 
+  const dateFiltered = useMemo(
+    () => expenses.filter((e) => (!from || e.date >= from) && (!to || e.date <= to)),
+    [expenses, from, to],
+  );
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return expenses;
-    return expenses.filter((e) =>
+    if (!q) return dateFiltered;
+    return dateFiltered.filter((e) =>
       [e.title, e.category, e.note].some((s) => s && s.toLowerCase().includes(q)),
     );
-  }, [expenses, query]);
+  }, [dateFiltered, query]);
 
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
 
   const personTotals = useMemo(() => {
     const totals = new Map<string, number>();
     let unassigned = 0;
-    for (const e of expenses) {
+    for (const e of dateFiltered) {
       if (e.personId) totals.set(e.personId, (totals.get(e.personId) ?? 0) + e.amountCents);
       else unassigned += e.amountCents;
     }
     return { totals, unassigned };
-  }, [expenses]);
+  }, [dateFiltered]);
+
+  const categorySegments = useMemo(() => {
+    const totals = new Map<string, number>();
+    for (const e of filtered) {
+      const key = e.category || 'Uncategorized';
+      totals.set(key, (totals.get(key) ?? 0) + e.amountCents);
+    }
+    if (totals.size === 0) return [];
+    return [...totals.entries()]
+      .map(([label, value]) => ({
+        label,
+        value,
+        color: label === 'Uncategorized' ? categoryColor(null) : categoryColor(label),
+      }))
+      .sort((a, b) => b.value - a.value);
+  }, [filtered]);
 
   if (!trip || !view) return null;
   const cur = trip.currency;
@@ -51,6 +76,9 @@ export function ExpensesTab({ onEdit }: { onEdit: (e: Expense) => void }) {
 
   const lightboxExpense = lightbox && expenses.find((e) => e.id === lightbox.expenseId);
   const whoPaid = (e: Expense) => (e.personId ? memberById.get(e.personId) : null);
+  const rangeActive = !!(from || to);
+  const tripEnd = addDays(trip.startDate, trip.days - 1);
+  const catTotal = categorySegments.reduce((a, s) => a + s.value, 0);
 
   return (
     <div className="page">
@@ -61,6 +89,46 @@ export function ExpensesTab({ onEdit }: { onEdit: (e: Expense) => void }) {
           onChange={(e) => setQuery(e.target.value)}
           aria-label="Search expenses"
         />
+      </div>
+
+      <div className="datefilter">
+        <label>
+          <span>From</span>
+          <input
+            type="date"
+            className="input"
+            min={trip.startDate}
+            max={tripEnd}
+            value={from}
+            onChange={(e) => setFrom(e.target.value)}
+            aria-label="Filter expenses from date"
+          />
+        </label>
+        <label>
+          <span>To</span>
+          <input
+            type="date"
+            className="input"
+            min={trip.startDate}
+            max={tripEnd}
+            value={to}
+            onChange={(e) => setTo(e.target.value)}
+            aria-label="Filter expenses to date"
+          />
+        </label>
+        {rangeActive && (
+          <button
+            type="button"
+            className="iconbtn"
+            aria-label="Clear date filter"
+            onClick={() => {
+              setFrom('');
+              setTo('');
+            }}
+          >
+            ✕
+          </button>
+        )}
       </div>
 
       {(members.length > 0 || personTotals.unassigned > 0) && (
@@ -95,9 +163,41 @@ export function ExpensesTab({ onEdit }: { onEdit: (e: Expense) => void }) {
         </div>
       )}
 
+      {filtered.length > 0 && (
+        <div className="card categories-card">
+          <CategoryDonut segments={categorySegments} size={124} stroke={22}>
+            <span className="small muted">Total</span>
+            <span className="amount" style={{ fontWeight: 800, marginTop: 2 }}>
+              {formatMoney(catTotal, cur)}
+            </span>
+          </CategoryDonut>
+          <div className="legend">
+            {categorySegments.map((s) => (
+              <div className="legend-row" key={s.label}>
+                <span className="catdot" style={{ background: s.color }} />
+                <span className="mid exp-title">{s.label}</span>
+                <span className="small muted" style={{ flexShrink: 0 }}>
+                  {Math.round((s.value / catTotal) * 100)}%
+                </span>
+                <span className="amount" style={{ fontWeight: 700, flexShrink: 0 }}>
+                  {formatMoney(s.value, cur)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {filtered.length === 0 && (
-        <EmptyState icon={<IconCamera size={34} />} headline={query ? 'No matches' : 'No expenses yet'}>
-          {query ? 'Try a different search.' : 'Log your first expense with the + button.'}
+        <EmptyState
+          icon={<IconCamera size={34} />}
+          headline={query ? 'No matches' : rangeActive ? 'Nothing in this range' : 'No expenses yet'}
+        >
+          {query
+            ? 'Try a different search.'
+            : rangeActive
+              ? 'Clear or widen the date filter.'
+              : 'Log your first expense with the + button.'}
         </EmptyState>
       )}
 
